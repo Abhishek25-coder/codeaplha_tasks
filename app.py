@@ -1,114 +1,53 @@
 import streamlit as st
 import numpy as np
+import librosa
 import joblib
 
-# Load saved model and scaler
-model = joblib.load("heart_model.pkl")
-scaler = joblib.load("scaler.pkl")
+model = joblib.load("emotion_model.pkl")
+encoder = joblib.load("label_encoder.pkl")
 
-st.set_page_config(
-    page_title="Heart Disease Prediction",
-    page_icon="❤️",
-    layout="centered"
+def extract_features(file):
+
+    audio, sr = librosa.load(
+        file,
+        duration=3,
+        offset=0.5
+    )
+
+    mfcc = librosa.feature.mfcc(
+        y=audio,
+        sr=sr,
+        n_mfcc=40
+    )
+
+    return np.mean(mfcc.T, axis=0).reshape(1,-1)
+
+st.title("🎤 Speech Emotion Recognition")
+
+uploaded = st.file_uploader(
+    "Upload WAV File",
+    type=["wav"]
 )
 
-st.title("❤️ Heart Disease Prediction System")
-st.write("Enter the patient's medical details below.")
+if uploaded:
 
-age = st.number_input("Age", 1, 120, 50)
-sex = st.selectbox("Sex", ["Female", "Male"])
+    st.audio(uploaded)
 
-cp = st.selectbox(
-    "Chest Pain Type",
-    [0, 1, 2, 3]
-)
+    features = extract_features(uploaded)
 
-trestbps = st.number_input(
-    "Resting Blood Pressure",
-    80,
-    250,
-    120
-)
+    prediction = model.predict(features)
 
-chol = st.number_input(
-    "Cholesterol",
-    100,
-    600,
-    200
-)
+    probability = model.predict_proba(features)
 
-fbs = st.selectbox(
-    "Fasting Blood Sugar > 120 mg/dl",
-    ["No", "Yes"]
-)
+    emotion = encoder.inverse_transform(prediction)[0]
 
-restecg = st.selectbox(
-    "Rest ECG",
-    [0, 1, 2]
-)
+    confidence = np.max(probability) * 100
 
-thalach = st.number_input(
-    "Maximum Heart Rate",
-    60,
-    250,
-    150
-)
+    st.success(f"Predicted Emotion: {emotion.upper()}")
 
-exang = st.selectbox(
-    "Exercise Induced Angina",
-    ["No", "Yes"]
-)
+    st.info(f"Confidence: {confidence:.2f}%")
 
-oldpeak = st.number_input(
-    "Old Peak",
-    0.0,
-    10.0,
-    1.0
-)
+    st.subheader("All Emotion Probabilities")
 
-slope = st.selectbox(
-    "Slope",
-    [0, 1, 2]
-)
-
-ca = st.selectbox(
-    "Major Vessels",
-    [0, 1, 2, 3]
-)
-
-thal = st.selectbox(
-    "Thal",
-    [0, 1, 2, 3]
-)
-
-# Convert text values to numbers
-sex = 1 if sex == "Male" else 0
-fbs = 1 if fbs == "Yes" else 0
-exang = 1 if exang == "Yes" else 0
-
-if st.button("Predict"):
-
-    patient = np.array([[
-        age,
-        sex,
-        cp,
-        trestbps,
-        chol,
-        fbs,
-        restecg,
-        thalach,
-        exang,
-        oldpeak,
-        slope,
-        ca,
-        thal
-    ]])
-
-    patient = scaler.transform(patient)
-
-    prediction = model.predict(patient)
-
-    if prediction[0] == 1:
-        st.error("⚠️ Heart Disease Detected")
-    else:
-        st.success("✅ No Heart Disease")
+    for emo, prob in zip(encoder.classes_, probability[0]):
+        st.write(f"{emo}: {prob*100:.2f}%")
